@@ -37,21 +37,19 @@ typedef struct {
   int32_t  step_event_count;          // The number of step events required to complete this block
 
   // Fields used by the motion planner to manage acceleration
-  float nominal_speed;               // The nominal speed for this block in mm/min  
-  float entry_speed;                 // Entry speed at previous-current block junction in mm/min
-  float max_entry_speed;             // Maximum allowable junction entry speed in mm/min
+  float nominal_speed_sqr;           // The nominal speed for this block in mm/min  
+  float entry_speed_sqr;             // Entry speed at previous-current block junction in mm/min
+  float max_entry_speed_sqr;         // Maximum allowable junction entry speed in mm/min
   float millimeters;                 // The total travel of this block in mm
-  uint8_t recalculate_flag;           // Planner flag to recalculate trapezoids on entry junction
-  uint8_t nominal_length_flag;        // Planner flag for nominal speed always reached
+  float acceleration;
+  uint8_t recalculate_flag;          // Planner flag to recalculate trapezoids on entry junction
 
   // Settings for the trapezoid generator
   uint32_t initial_rate;              // The step rate at start of block  
-  uint32_t final_rate;                // The step rate at end of block
   int32_t rate_delta;                 // The steps/minute to add or subtract when changing speed (must be positive)
-  uint32_t accelerate_until;          // The index of the step event on which to stop acceleration
   uint32_t decelerate_after;          // The index of the step event on which to start decelerating
   uint32_t nominal_rate;              // The nominal step rate for this block in step_events/minute
-
+  uint32_t d_next;                    // Scaled distance to next step
 } block_t;
       
 // Initialize the motion plan subsystem      
@@ -74,9 +72,6 @@ void plan_set_current_position(int32_t x, int32_t y, int32_t z);
 
 // Reinitialize plan with a partially completed block
 void plan_cycle_reinitialize(int32_t step_events_remaining);
-
-// Reset buffer
-void plan_reset_buffer();
 
 // Returns the status of the block ring buffer. True, if buffer is full.
 uint8_t plan_check_full_buffer();

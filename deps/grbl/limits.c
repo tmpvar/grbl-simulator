@@ -96,7 +96,7 @@ static void homing_cycle(uint8_t cycle_mask, int8_t pos_dir, bool invert_pin, fl
   // and speedy homing routine.
   // NOTE: For each axes enabled, the following calculations assume they physically move 
   // an equal distance over each time step until they hit a limit switch, aka dogleg.
-  uint32_t steps[3];
+  uint32_t steps[N_AXIS];
   uint8_t dist = 0;
   clear_vector(steps);
   if (cycle_mask & (1<<X_AXIS)) { 
@@ -121,7 +121,7 @@ static void homing_cycle(uint8_t cycle_mask, int8_t pos_dir, bool invert_pin, fl
   float ds = step_event_count/sqrt(dist);
 
   // Compute the adjusted step rate change with each acceleration tick. (in step/min/acceleration_tick)
-  uint32_t delta_rate = ceil( ds*settings.acceleration/(60*ACCELERATION_TICKS_PER_SECOND));
+  uint32_t delta_rate = ceil( ds*settings.acceleration[X_AXIS]/(60*ACCELERATION_TICKS_PER_SECOND));
   
   #ifdef HOMING_RATE_ADJUST
     // Adjust homing rate so a multiple axes moves all at the homing rate independently.
