@@ -1,0 +1,26 @@
+{
+  "name": "grbl-simulator",
+  "version": "0.0.1",
+  "description": "wrapper around the grbl simulator",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "preinstall": "cd deps/grbl/sim && make clean all"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/tmpvar/grbl-simulator.git"
+  },
+  "keywords": [
+    "grbl",
+    "simulator",
+    "cnc",
+    "gcode"
+  ],
+  "author": "Elijah Insua tmpvar@gmail.com>",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "through": "~2.1.0"
+  }
+}
