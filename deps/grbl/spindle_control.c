@@ -23,35 +23,76 @@
 #include "spindle_control.h"
 #include "planner.h"
 
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
 static uint8_t current_direction;
+
+#define MAX 65535
+#define WHERE_OFFSET 40000
+#define WHERE_BASELINE 2000
 
 void spindle_init()
 {
   current_direction = 0;
   SPINDLE_ENABLE_DDR |= (1<<SPINDLE_ENABLE_BIT);
-  SPINDLE_DIRECTION_DDR |= (1<<SPINDLE_DIRECTION_BIT);  
-  spindle_stop();
+  SPINDLE_DIRECTION_DDR |= (1<<SPINDLE_DIRECTION_BIT);
+  spindle_run(1, 100);
 }
 
-void spindle_stop()
-{
-  SPINDLE_ENABLE_PORT &= ~(1<<SPINDLE_ENABLE_BIT);
+int spindle_where = 2000, spindle_up, phase=0;
+uint16_t speed = 0;
+void spindle_stop() {
+  spindle_up = -5;
 }
 
-void spindle_run(int8_t direction) //, uint16_t rpm) 
-{
-  if (direction != current_direction) {
-    plan_synchronize();
-    if (direction) {
-      if(direction > 0) {
-        SPINDLE_DIRECTION_PORT &= ~(1<<SPINDLE_DIRECTION_BIT);
-      } else {
-        SPINDLE_DIRECTION_PORT |= 1<<SPINDLE_DIRECTION_BIT;
+
+#ifdef TCNT1
+  ISR(TIMER1_OVF_vect) {
+
+     spindle_where+=spindle_up;
+     if (spindle_up < 0 && spindle_where <= 2000) {
+      //TCCR1B = 0;
+      spindle_where = 100;
+     } else {
+
+      if (spindle_where > speed) {
+        spindle_where = speed;
       }
-      SPINDLE_ENABLE_PORT |= 1<<SPINDLE_ENABLE_BIT;
-    } else {
-      spindle_stop();     
-    }
-    current_direction = direction;
+
+      if (phase) {
+        TCNT1 = MAX-(WHERE_OFFSET - spindle_where);
+        SPINDLE_ENABLE_PORT &= ~(1<<SPINDLE_ENABLE_BIT);
+      } else {
+        SPINDLE_ENABLE_PORT |= 1<<SPINDLE_ENABLE_BIT;
+        TCNT1 = MAX-spindle_where;
+      }
+
+       phase = (phase) ? 0 : 1;
+     }
   }
+#endif
+
+void spindle_run(int8_t direction, uint16_t rpm)
+{
+  #ifdef TCNT1
+    TIMSK1 |= (1 << TOIE1); // Enable overflow interrupt
+    TCNT1 = MAX-(WHERE_OFFSET-spindle_where); // Preload timer with precalculated value
+    TCCR1B |= (1 << CS11);
+
+    if (direction && rpm) {
+      spindle_up = 5;
+
+      // Using a bigfoot 160:
+      //  245KV @ 34v DC = 8330rpm
+      //  minimal cycle time: 2.5ms
+      //  max cycle time: 1.1ms
+      //  1100/8330 = 0.13205282112845138 step size
+
+      speed = rpm*0.13205282112845138 + WHERE_BASELINE;
+    } else {
+      spindle_stop();
+    }
+  #endif
+
 }

@@ -3,7 +3,7 @@
   Part of Grbl
 
   Copyright (c) 2009-2011 Simen Svale Skogsrud
-  Copyright (c) 2011-2012 Sungeun K. Jeon
+  Copyright (c) 2011-2013 Sungeun K. Jeon
   
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -77,8 +77,9 @@ static float to_millimeters(float value)
 
 // Executes one line of 0-terminated G-Code. The line is assumed to contain only uppercase
 // characters and signed floating point values (no whitespace). Comments and block delete
-// characters have been removed. All units and positions are converted and exported to grbl's
-// internal functions in terms of (mm, mm/min) and absolute machine coordinates, respectively.
+// characters have been removed. In this function, all units and positions are converted and 
+// exported to grbl's internal functions in terms of (mm, mm/min) and absolute machine 
+// coordinates, respectively.
 uint8_t gc_execute_line(char *line) 
 {
 
@@ -203,7 +204,10 @@ uint8_t gc_execute_line(char *line)
   
   /* Pass 2: Parameters. All units converted according to current block commands. Position 
      parameters are converted and flagged to indicate a change. These can have multiple connotations
-     for different commands. Each will be converted to their proper value upon execution. */
+     for different commands. Each will be converted to their proper value upon execution. 
+     NOTE: Grbl unconventionally pre-converts these parameter values based on the block G and M 
+     commands. This is set out of the order of execution defined by NIST only for code efficiency/size 
+     purposes, but should not affect proper g-code execution. */ 
   float p = 0, r = 0;
   uint8_t l = 0;
   char_counter = 0;
@@ -225,7 +229,7 @@ uint8_t gc_execute_line(char *line)
       case 'S': 
         if (value < 0) { FAIL(STATUS_INVALID_STATEMENT); } // Cannot be negative
         // TBD: Spindle speed not supported due to PWM issues, but may come back once resolved.
-        // gc.spindle_speed = value;
+        gc.spindle_speed = value;
         break;
       case 'T': 
         if (value < 0) { FAIL(STATUS_INVALID_STATEMENT); } // Cannot be negative
@@ -242,17 +246,15 @@ uint8_t gc_execute_line(char *line)
   if (gc.status_code) { return(gc.status_code); }
   
   
-  /* Execute Commands: Perform by order of execution defined in NIST RS274-NGC.v3, Table 8, pg.41.
-     NOTE: Independent non-motion/settings parameters are set out of this order for code efficiency 
-     and simplicity purposes, but this should not affect proper g-code execution. */
-  
+  /* Execute Commands: Perform by order of execution defined in NIST RS274-NGC.v3, Table 8, pg.41. */
+    
   // ([F]: Set feed rate.)
     
   if (sys.state != STATE_CHECK_MODE) { 
     //  ([M6]: Tool change should be executed here.)
 
     // [M3,M4,M5]: Update spindle state
-    spindle_run(gc.spindle_direction);
+    spindle_run(gc.spindle_direction, gc.spindle_speed);
   
     // [*M7,M8,M9]: Update coolant state
     coolant_run(gc.coolant_mode);
@@ -279,28 +281,29 @@ uint8_t gc_execute_line(char *line)
       break;
     case NON_MODAL_SET_COORDINATE_DATA:
       int_value = trunc(p); // Convert p value to int.
-      if ((l != 2 && l != 20) || (int_value < 1 || int_value > N_COORDINATE_SYSTEM)) { // L2 and L20. P1=G54, P2=G55, ... 
+      if ((l != 2 && l != 20) || (int_value < 0 || int_value > N_COORDINATE_SYSTEM)) { // L2 and L20. P1=G54, P2=G55, ... 
         FAIL(STATUS_UNSUPPORTED_STATEMENT); 
       } else if (!axis_words && l==2) { // No axis words.
         FAIL(STATUS_INVALID_STATEMENT);
       } else {
-        int_value--; // Adjust P index to EEPROM coordinate data indexing.
-        if (l == 20) {
-          settings_write_coord_data(int_value,gc.position);
-          // Update system coordinate system if currently active.
-          if (gc.coord_select == int_value) { memcpy(gc.coord_system,gc.position,sizeof(gc.position)); }
-        } else {
-          float coord_data[N_AXIS];
-          if (!settings_read_coord_data(int_value,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
-          // Update axes defined only in block. Always in machine coordinates. Can change non-active system.
-          uint8_t i;
-          for (i=0; i<N_AXIS; i++) { // Axes indices are consistent, so loop may be used.
-            if ( bit_istrue(axis_words,bit(i)) ) { coord_data[i] = target[i]; }
+        if (int_value > 0) { int_value--; } // Adjust P1-P6 index to EEPROM coordinate data indexing.
+        else { int_value = gc.coord_select; } // Index P0 as the active coordinate system
+        float coord_data[N_AXIS];
+        if (!settings_read_coord_data(int_value,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
+        uint8_t i;
+        // Update axes defined only in block. Always in machine coordinates. Can change non-active system.
+        for (i=0; i<N_AXIS; i++) { // Axes indices are consistent, so loop may be used.
+          if (bit_istrue(axis_words,bit(i)) ) {
+            if (l == 20) {
+              coord_data[i] = gc.position[i]-target[i]; // L20: Update axis current position to target
+            } else {
+              coord_data[i] = target[i]; // L2: Update coordinate system axis
+            }
           }
-          settings_write_coord_data(int_value,coord_data);
-          // Update system coordinate system if currently active.
-          if (gc.coord_select == int_value) { memcpy(gc.coord_system,coord_data,sizeof(coord_data)); }
         }
+        settings_write_coord_data(int_value,coord_data);
+        // Update system coordinate system if currently active.
+        if (gc.coord_select == int_value) { memcpy(gc.coord_system,coord_data,sizeof(coord_data)); }
       }
       axis_words = 0; // Axis words used. Lock out from motion modes by clearing flags.
       break;
@@ -321,21 +324,25 @@ uint8_t gc_execute_line(char *line)
             target[i] = gc.position[i];
           }
         }
-        mc_line(target[X_AXIS], target[Y_AXIS], target[Z_AXIS], -1.0, false);
+        mc_line(target, -1.0, false);
       }
       // Retreive G28/30 go-home position data (in machine coordinates) from EEPROM
       float coord_data[N_AXIS];
-      uint8_t home_select = SETTING_INDEX_G28;
-      if (non_modal_action == NON_MODAL_GO_HOME_1) { home_select = SETTING_INDEX_G30; }
-      if (!settings_read_coord_data(home_select,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
-      mc_line(coord_data[X_AXIS], coord_data[Y_AXIS], coord_data[Z_AXIS], -1.0, false); 
+      if (non_modal_action == NON_MODAL_GO_HOME_0) {
+        if (!settings_read_coord_data(SETTING_INDEX_G28,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
+      } else {
+        if (!settings_read_coord_data(SETTING_INDEX_G30,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
+      }
+      mc_line(coord_data, -1.0, false); 
       memcpy(gc.position, coord_data, sizeof(coord_data)); // gc.position[] = coord_data[];
       axis_words = 0; // Axis words used. Lock out from motion modes by clearing flags.
       break;
     case NON_MODAL_SET_HOME_0: case NON_MODAL_SET_HOME_1:
-      home_select = SETTING_INDEX_G28;
-      if (non_modal_action == NON_MODAL_SET_HOME_1) { home_select = SETTING_INDEX_G30; }
-      settings_write_coord_data(home_select,gc.position);
+      if (non_modal_action == NON_MODAL_SET_HOME_0) {
+        settings_write_coord_data(SETTING_INDEX_G28,gc.position);
+      } else {
+        settings_write_coord_data(SETTING_INDEX_G30,gc.position);
+      }
       break;
     case NON_MODAL_SET_COORDINATE_OFFSET:
       if (!axis_words) { // No axis words
@@ -399,7 +406,7 @@ uint8_t gc_execute_line(char *line)
         break;
       case MOTION_MODE_SEEK:
         if (!axis_words) { FAIL(STATUS_INVALID_STATEMENT);} 
-        else { mc_line(target[X_AXIS], target[Y_AXIS], target[Z_AXIS], -1.0, false); }
+        else { mc_line(target, -1.0, false); }
         break;
       case MOTION_MODE_LINEAR:
         // TODO: Inverse time requires F-word with each statement. Need to do a check. Also need
@@ -407,8 +414,7 @@ uint8_t gc_execute_line(char *line)
         // and after an inverse time move and then check for non-zero feed rate each time. This
         // should be efficient and effective.
         if (!axis_words) { FAIL(STATUS_INVALID_STATEMENT);} 
-        else { mc_line(target[X_AXIS], target[Y_AXIS], target[Z_AXIS], 
-          (gc.inverse_feed_rate_mode) ? inverse_feed_rate : gc.feed_rate, gc.inverse_feed_rate_mode); }
+        else { mc_line(target, (gc.inverse_feed_rate_mode) ? inverse_feed_rate : gc.feed_rate, gc.inverse_feed_rate_mode); }
         break;
       case MOTION_MODE_CW_ARC: case MOTION_MODE_CCW_ARC:
         // Check if at least one of the axes of the selected plane has been specified. If in center 
