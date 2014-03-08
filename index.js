@@ -21,6 +21,7 @@ var lineHandler = function() {
 function Simulator(interval) {
   interval = interval || 0.1;
 
+
   var currentBlock = 0;
   this.positionStream = through(function(data) {
     if (data[0] === '#') {
@@ -41,8 +42,14 @@ function Simulator(interval) {
     this.emit('data', obj);
   });
 
-  this.process = child.spawn(path.join(dir, 'grbl_sim.exe'), [interval]);
+  var sim_process = this.process = child.spawn(path.join(dir, 'grbl_sim.exe'), [interval]);
 
+  sim_process.on('open', function() {
+    console.log('open');
+    [0, 1, 2].forEach(function(i) {
+      sim_process.stdin.write('$' + i + '=1000\n');
+    });
+  });
   this.outputStream = lineHandler();
   this.process.stdout
     .pipe(this.outputStream);
@@ -58,5 +65,3 @@ Simulator.prototype.send = function(string) {
 
 module.exports = Simulator;
 
-var sim = new Simulator();
-process.stdin.pipe(sim.process.stdin);
