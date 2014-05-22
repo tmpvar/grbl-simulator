@@ -1,9 +1,6 @@
-var Simulator = require('../');
+var sim = require('../')(1.0);
 var fs = require('fs');
 
-var sim = new Simulator(0.1);
-
-sim.process.stdout.pipe(process.stdout);
-sim.process.stderr.pipe(process.stdout);
-
-fs.createReadStream(__dirname + '/grbl.gcode').pipe(sim.process.stdin);
+fs.createReadStream(__dirname + '/grbl.gcode')
+  .pipe(sim)
+  .pipe(process.stdout)

@@ -21,6 +21,8 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
-    "through": "^2.3.4"
+    "through": "^2.3.4",
+    "split": "^0.3.0",
+    "duplexer": "^0.1.1"
   }
 }
