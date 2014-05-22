@@ -1,6 +1,6 @@
 {
   "name": "grbl-simulator",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "wrapper around the grbl simulator",
   "main": "index.js",
   "scripts": {
