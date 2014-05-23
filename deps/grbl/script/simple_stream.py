@@ -16,10 +16,10 @@ import serial
 import time
 
 # Open grbl serial port
-s = serial.Serial('/dev/tty.usbmodemfa131',9600)
+s = serial.Serial('/dev/tty.usbmodem1811',9600)
 
 # Open g-code file
-f = open('/Users/tmpvar/work/hardware/grbl/script/grbl.gcode','r');
+f = open('grbl.gcode','r');
 
 # Wake up grbl
 s.write("\r\n\r\n")

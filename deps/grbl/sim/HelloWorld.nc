@@ -1,7 +1,7 @@
 ( Made using CamBam - http://www.cambam.co.uk )
 ( Untitled 2/13/2012 2:54:50 PM )
 ( T0 : 0.0394 )
-G90 G64 G40
+G20 G90 G64 G40
 G0 Z0.125
 ( T0 : 0.0394 )
 T0 M6

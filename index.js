@@ -7,23 +7,27 @@ var child = require('child_process'),
 
 function createSimulator(interval, stepsPerMM) {
   interval = interval || 0.1;
-  stepsPerMM = stepsPerMM || 1000;
+  stepsPerMM = stepsPerMM || 250;
 
   var sim_process = child.spawn(path.join(dir, 'grbl_sim.exe'), [interval]);
 
   sim_process.on('open', function() {
     [0, 1, 2].forEach(function(i) {
-      sim_process.stdin.write('$' + i + '=' + stepsPerMM + '\n');
+      sim_process.stdin.write('$' + i + '=' + stepsPerMM + '\r\n');
     });
   });
+
+  sim_process.stdout.pipe(process.stdout);
 
   return duplexer(
     sim_process.stdin,
     sim_process.stderr.pipe(split()).pipe(through(function(d) {
       d = d.trim();
+
       var parts = d.split(', ');
 
       if (d[0] !== '#' && parts.length) {
+
         var obj = {
           time : parseFloat(parts[0]),
           x : parseInt(parts[1]) / stepsPerMM,
