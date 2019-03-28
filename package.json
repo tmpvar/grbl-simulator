@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "preinstall": "cd deps/grbl/sim && make clean all"
+    "preinstall": "cd deps/grbl/sim && make CC=gcc clean all"
   },
   "repository": {
     "type": "git",
